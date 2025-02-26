@@ -12,11 +12,11 @@
             <add-to-group group-id="WindowMenu" anchor="last"/>
             <keyboard-shortcut keymap="$default" first-keystroke="control EQUALS"/>
         </action>
-        <action id="com.github.ajaymamtora.ijutilities.TerminalFocusAction"
+        <action id="TerminalFocusAction"
                 class="com.github.ajaymamtora.ijutilities.TerminalFocusAction" text="TerminalFocusAction">
             <add-to-group group-id="WindowMenu" anchor="last"/>
         </action>
-        <action id="com.github.ajaymamtora.ijutilities.QuickWindowSwitcher"
+        <action id="QuickWindowSwitcher"
                 class="com.github.ajaymamtora.ijutilities.QuickWindowSwitcher"
                 text="Quick Window Switcher"
                 description="Quickly switch between editor windows">
