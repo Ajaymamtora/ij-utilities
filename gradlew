@@ -107,7 +107,7 @@ die () {
 cygwin=false
 msys=false
 darwin=false
-nonstop=false
+nonstop=falses
 case "$( uname )" in                #(
   CYGWIN* )         cygwin=true  ;; #(
   Darwin* )         darwin=true  ;; #(
