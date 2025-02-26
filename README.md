@@ -17,11 +17,15 @@
 - [ ] Click the <kbd>Watch</kbd> button on the top of the [IntelliJ Platform Plugin Template][template] to be notified about releases containing new features and fixes.
 
 <!-- Plugin description -->
-This Fancy IntelliJ Platform Plugin is going to be your implementation of the brilliant ideas that you have.
+## IJ Utilities
+A collection of small, useful utilities for IntelliJ Platform IDEs inspired by popular Vim/Neovim features.
 
-This specific section is a source for the [plugin.xml](/src/main/resources/META-INF/plugin.xml) file which will be extracted by the [Gradle](/build.gradle.kts) during the build process.
+### Features:
+* **Equalize Windows:** Resizes all windows equally, similar to Neovim's `<C-w>=` command
+* **Window Picker:** Quickly select and focus specific windows in your IDE layout, inspired by nvim-window-picker
+* **Terminal Focus:** Intelligent terminal handling - focuses existing terminal or creates a new one if none exists
 
-To keep everything working, do not remove `<!-- ... -->` sections. 
+These utilities enhance your workflow with convenient shortcuts for common window management tasks.
 <!-- Plugin description end -->
 
 ## Installation
