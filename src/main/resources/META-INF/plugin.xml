@@ -16,5 +16,11 @@
                 class="com.github.ajaymamtora.ijutilities.TerminalFocusAction" text="TerminalFocusAction">
             <add-to-group group-id="WindowMenu" anchor="last"/>
         </action>
+        <action id="com.github.ajaymamtora.ijutilities.QuickWindowSwitcher"
+                class="com.github.ajaymamtora.ijutilities.QuickWindowSwitcher"
+                text="Quick Window Switcher"
+                description="Quickly switch between editor windows">
+            <keyboard-shortcut keymap="$default" first-keystroke="alt W"/>
+        </action>
     </actions>
 </idea-plugin>
