@@ -15,15 +15,16 @@ import java.awt.*
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import javax.swing.*
+import javax.swing.JDialog
 
 class QuickWindowSwitcher : AnAction() {
 
     private val overlayKeys = listOf('A', 'S', 'D', 'F', 'Q', 'W', 'E', 'R')
     private val overlayColors = listOf(
-        JBColor(Color(232, 78, 64, 60), Color(232, 78, 64, 60)),   // Red - ~24% opaque
-        JBColor(Color(46, 134, 193, 60), Color(46, 134, 193, 60)),  // Blue - ~24% opaque
-        JBColor(Color(40, 180, 99, 60), Color(40, 180, 99, 60)),   // Green - ~24% opaque
-        JBColor(Color(241, 196, 15, 60), Color(241, 196, 15, 60))   // Yellow - ~24% opaque
+        JBColor(Color(232, 78, 64, 25), Color(232, 78, 64, 25)),   // Red - ~10% opaque
+        JBColor(Color(46, 134, 193, 25), Color(46, 134, 193, 25)),  // Blue - ~10% opaque
+        JBColor(Color(40, 180, 99, 25), Color(40, 180, 99, 25)),   // Green - ~10% opaque
+        JBColor(Color(241, 196, 15, 25), Color(241, 196, 15, 25))   // Yellow - ~10% opaque
     )
 
     override fun getActionUpdateThread(): ActionUpdateThread {
@@ -64,10 +65,17 @@ class QuickWindowSwitcher : AnAction() {
 
                 // Only add visible editors with non-zero bounds
                 if (bounds.width > 0 && bounds.height > 0) {
-                    // Convert bounds to screen coordinates
-                    val locationOnScreen = component.locationOnScreen
-                    val screenBounds = Rectangle(locationOnScreen.x, locationOnScreen.y, bounds.width, bounds.height)
-                    result.add(Pair(component, screenBounds))
+                    try {
+                        // Check if component is showing before getting screen location
+                        if (component.isShowing) {
+                            // Convert bounds to screen coordinates
+                            val locationOnScreen = component.locationOnScreen
+                            val screenBounds = Rectangle(locationOnScreen.x, locationOnScreen.y, bounds.width, bounds.height)
+                            result.add(Pair(component, screenBounds))
+                        }
+                    } catch (e: IllegalComponentStateException) {
+                        // Skip this component if we can't get its screen location
+                    }
                 }
             }
         }
@@ -75,8 +83,8 @@ class QuickWindowSwitcher : AnAction() {
         return result
     }
 
-    private fun createOverlays(editorWindows: List<Pair<JComponent, Rectangle>>): List<JWindow> {
-        val overlays = mutableListOf<JWindow>()
+    private fun createOverlays(editorWindows: List<Pair<JComponent, Rectangle>>): List<JDialog> {
+        val overlays = mutableListOf<JDialog>()
 
         editorWindows.forEachIndexed { index, (_, bounds) ->
             if (index >= overlayKeys.size) return@forEachIndexed
@@ -84,8 +92,13 @@ class QuickWindowSwitcher : AnAction() {
             val key = overlayKeys[index]
             val color = overlayColors[index % overlayColors.size]
 
-            val overlay = JWindow()
-            overlay.background = JBColor(Color(0, 0, 0, 0), Color(0, 0, 0, 0))
+            // Create undecorated dialog for better transparency support
+            val overlay = JDialog()
+            overlay.isUndecorated = true
+            overlay.background = JBColor(Color(0, 0, 0, 0), Color(0, 0, 0, 0))  // Using JBColor
+
+            // Make entire dialog transparent
+            overlay.opacity = 0.8f
 
             val panel = object : JPanel() {
                 override fun paintComponent(g: Graphics) {
@@ -93,19 +106,38 @@ class QuickWindowSwitcher : AnAction() {
                     val g2d = g as Graphics2D
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-                    // Draw semi-transparent background
-                    g2d.color = color
+                    // Set panel to be completely transparent initially
+                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.CLEAR)
                     g2d.fillRect(0, 0, width, height)
 
-                    // Draw key letter
+                    // Create a thin border with the color
+                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.4f)
+                    g2d.color = color
+                    g2d.drawRect(0, 0, width - 1, height - 1)
+                    g2d.drawRect(1, 1, width - 3, height - 3)
+
+                    // Create small label area at the bottom
+                    val labelHeight = height / 10
+                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f)
+                    g2d.fillRect(0, height - labelHeight, width, labelHeight)
+
+                    // Draw key letter with higher contrast
+                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f)
                     g2d.color = JBColor.WHITE
-                    val font = Font("Arial", Font.BOLD, height / 3)
+
+                    val fontSize = labelHeight / 2
+                    val font = Font("Arial", Font.BOLD, fontSize)
                     g2d.font = font
 
                     val metrics = g2d.fontMetrics
                     val x = (width - metrics.stringWidth(key.toString())) / 2
-                    val y = ((height - metrics.height) / 2) + metrics.ascent
+                    val y = height - (labelHeight / 2) + (metrics.height / 4)
 
+                    // Add slight shadow to make the letter more visible
+                    g2d.color = JBColor.BLACK
+                    g2d.drawString(key.toString(), x + 1, y + 1)
+
+                    g2d.color = JBColor.WHITE
                     g2d.drawString(key.toString(), x, y)
                 }
             }
@@ -115,24 +147,29 @@ class QuickWindowSwitcher : AnAction() {
             overlay.setLocation(bounds.x, bounds.y)
             overlay.size = Dimension(bounds.width, bounds.height)
 
+            // Make sure it stays on top
+            overlay.isAlwaysOnTop = true
+            // Make it not focusable to avoid stealing focus
+            overlay.focusableWindowState = false
+
             overlays.add(overlay)
         }
 
         return overlays
     }
 
-    private fun showOverlays(overlays: List<JWindow>) {
+    private fun showOverlays(overlays: List<JDialog>) {
         overlays.forEach { it.isVisible = true }
     }
 
-    private fun hideOverlays(overlays: List<JWindow>) {
+    private fun hideOverlays(overlays: List<JDialog>) {
         overlays.forEach {
             it.isVisible = false
             it.dispose()
         }
     }
 
-    private fun setupKeyListener(project: Project, editorWindows: List<Pair<JComponent, Rectangle>>, overlays: List<JWindow>) {
+    private fun setupKeyListener(project: Project, editorWindows: List<Pair<JComponent, Rectangle>>, overlays: List<JDialog>) {
         val keyListenerPanel = JPanel()
         keyListenerPanel.isFocusable = true
 
@@ -146,6 +183,13 @@ class QuickWindowSwitcher : AnAction() {
 
         keyListenerPanel.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
+                // Handle Escape key
+                if (e.keyCode == KeyEvent.VK_ESCAPE) {
+                    hideOverlays(overlays)
+                    popup.cancel()
+                    return
+                }
+
                 val key = e.keyChar.uppercaseChar()
                 val index = overlayKeys.indexOf(key)
 
