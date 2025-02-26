@@ -95,10 +95,10 @@ class QuickWindowSwitcher : AnAction() {
             // Create undecorated dialog for better transparency support
             val overlay = JDialog()
             overlay.isUndecorated = true
-            overlay.background = JBColor(Color(0, 0, 0, 0), Color(0, 0, 0, 0))  // Using JBColor
+            overlay.background = JBColor(Color(0, 0, 0, 0), Color(0, 0, 0, 0))
 
-            // Make entire dialog transparent
-            overlay.opacity = 0.8f
+            // Make entire dialog much more transparent (30% opacity)
+            overlay.opacity = 0.3f
 
             val panel = object : JPanel() {
                 override fun paintComponent(g: Graphics) {
@@ -111,18 +111,18 @@ class QuickWindowSwitcher : AnAction() {
                     g2d.fillRect(0, 0, width, height)
 
                     // Create a thin border with the color
-                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.4f)
+                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.25f)
                     g2d.color = color
                     g2d.drawRect(0, 0, width - 1, height - 1)
                     g2d.drawRect(1, 1, width - 3, height - 3)
 
-                    // Create small label area at the bottom
-                    val labelHeight = height / 10
-                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f)
+                    // Create small very transparent label area at the bottom
+                    val labelHeight = height / 12
+                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.2f)
                     g2d.fillRect(0, height - labelHeight, width, labelHeight)
 
-                    // Draw key letter with higher contrast
-                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f)
+                    // Draw key letter with high contrast
+                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f)
                     g2d.color = JBColor.WHITE
 
                     val fontSize = labelHeight / 2
@@ -173,20 +173,13 @@ class QuickWindowSwitcher : AnAction() {
         val keyListenerPanel = JPanel()
         keyListenerPanel.isFocusable = true
 
-        val popup = JBPopupFactory.getInstance()
-            .createComponentPopupBuilder(keyListenerPanel, keyListenerPanel)
-            .setCancelOnClickOutside(true)
-            .setCancelOnOtherWindowOpen(true)
-            .setCancelKeyEnabled(true)
-            .setRequestFocus(true)
-            .createPopup()
-
-        keyListenerPanel.addKeyListener(object : KeyAdapter() {
+        // Create a special key adapter to handle escape before creating the popup
+        val keyAdapter = object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
                 // Handle Escape key
                 if (e.keyCode == KeyEvent.VK_ESCAPE) {
                     hideOverlays(overlays)
-                    popup.cancel()
+                    SwingUtilities.getWindowAncestor(keyListenerPanel)?.dispose()
                     return
                 }
 
@@ -196,7 +189,7 @@ class QuickWindowSwitcher : AnAction() {
                 if (index != -1 && index < editorWindows.size) {
                     // Hide overlays first to prevent display issues
                     hideOverlays(overlays)
-                    popup.cancel()
+                    SwingUtilities.getWindowAncestor(keyListenerPanel)?.dispose()
 
                     // Focus the selected editor component
                     val (component, _) = editorWindows[index]
@@ -234,10 +227,31 @@ class QuickWindowSwitcher : AnAction() {
                 } else {
                     // If no valid key pressed, just close overlays
                     hideOverlays(overlays)
-                    popup.cancel()
+                    SwingUtilities.getWindowAncestor(keyListenerPanel)?.dispose()
                 }
             }
-        })
+        }
+
+        // Add the key listener before creating the popup
+        keyListenerPanel.addKeyListener(keyAdapter)
+
+        // Create the popup without modifying cancel key properties
+        val popup = JBPopupFactory.getInstance()
+            .createComponentPopupBuilder(keyListenerPanel, keyListenerPanel)
+            .setCancelOnClickOutside(true)
+            .setCancelOnOtherWindowOpen(true)
+            .setRequestFocus(true)
+            .createPopup()
+
+        // Alternative approach to handle escape key using key dispatcher
+        keyListenerPanel.registerKeyboardAction(
+            {
+                hideOverlays(overlays)
+                popup.cancel()
+            },
+            KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+            JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT
+        )
 
         // Show the invisible popup to capture keyboard input
         val firstComponent = editorWindows.firstOrNull()?.first
