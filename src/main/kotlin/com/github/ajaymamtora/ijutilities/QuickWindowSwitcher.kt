@@ -8,16 +8,35 @@ import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.JBColor
 import java.awt.*
-import java.awt.event.KeyAdapter
-import java.awt.event.KeyEvent
+import java.awt.event.*
 import javax.swing.*
-import javax.swing.JDialog
 
 class QuickWindowSwitcher : AnAction() {
+
+    // Add a companion object to track active instances
+    companion object {
+        private var activeOverlays: List<JDialog>? = null
+        private var activePopup: JBPopup? = null
+
+        // Method to dispose of any active window pickers
+        private fun disposeActiveOverlays() {
+            activeOverlays?.let { overlays ->
+                overlays.forEach {
+                    it.isVisible = false
+                    it.dispose()
+                }
+                activeOverlays = null
+            }
+
+            activePopup?.cancel()
+            activePopup = null
+        }
+    }
 
     private val overlayKeys = listOf('A', 'S', 'D', 'F', 'Q', 'W', 'E', 'R')
     private val overlayColors = listOf(
@@ -32,6 +51,9 @@ class QuickWindowSwitcher : AnAction() {
     }
 
     override fun actionPerformed(e: AnActionEvent) {
+        // First dispose of any active window pickers
+        disposeActiveOverlays()
+
         val project = e.project ?: return
         val fileEditorManager = FileEditorManager.getInstance(project)
         val editors = fileEditorManager.allEditors
@@ -48,6 +70,7 @@ class QuickWindowSwitcher : AnAction() {
 
         // Create overlays
         val overlays = createOverlays(editorWindows)
+        activeOverlays = overlays  // Store in companion object
         showOverlays(overlays)
 
         // Set up key listener to handle selection
@@ -167,19 +190,27 @@ class QuickWindowSwitcher : AnAction() {
             it.isVisible = false
             it.dispose()
         }
+        activeOverlays = null  // Clear the static reference
     }
 
     private fun setupKeyListener(project: Project, editorWindows: List<Pair<JComponent, Rectangle>>, overlays: List<JDialog>) {
         val keyListenerPanel = JPanel()
         keyListenerPanel.isFocusable = true
 
-        // Create a special key adapter to handle escape before creating the popup
+        // Create an action to handle escape key that we'll use in multiple places
+        val escapeAction = ActionListener {
+            hideOverlays(overlays)
+            activePopup?.cancel()
+            activePopup = null
+        }
+
+        // Create a more robust key adapter
         val keyAdapter = object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
-                // Handle Escape key
+                // Handle Escape key with priority
                 if (e.keyCode == KeyEvent.VK_ESCAPE) {
-                    hideOverlays(overlays)
-                    SwingUtilities.getWindowAncestor(keyListenerPanel)?.dispose()
+                    escapeAction.actionPerformed(null)
+                    e.consume()  // Mark event as handled
                     return
                 }
 
@@ -189,7 +220,8 @@ class QuickWindowSwitcher : AnAction() {
                 if (index != -1 && index < editorWindows.size) {
                     // Hide overlays first to prevent display issues
                     hideOverlays(overlays)
-                    SwingUtilities.getWindowAncestor(keyListenerPanel)?.dispose()
+                    activePopup?.cancel()
+                    activePopup = null
 
                     // Focus the selected editor component
                     val (component, _) = editorWindows[index]
@@ -224,18 +256,38 @@ class QuickWindowSwitcher : AnAction() {
                             component.requestFocus()
                         }
                     }
-                } else {
-                    // If no valid key pressed, just close overlays
-                    hideOverlays(overlays)
-                    SwingUtilities.getWindowAncestor(keyListenerPanel)?.dispose()
+                } else if (e.keyCode != KeyEvent.VK_SHIFT &&
+                    e.keyCode != KeyEvent.VK_CONTROL &&
+                    e.keyCode != KeyEvent.VK_ALT) {
+                    // If no valid key pressed (and not a modifier), close overlays
+                    escapeAction.actionPerformed(null)
                 }
             }
         }
 
-        // Add the key listener before creating the popup
+        // Add the key listener
         keyListenerPanel.addKeyListener(keyAdapter)
 
-        // Create the popup without modifying cancel key properties
+        // Register Escape key in multiple ways to ensure it works
+        // 1. As an input map binding
+        val inputMap = keyListenerPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        val actionMap = keyListenerPanel.actionMap
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "escapeAction")
+        actionMap.put("escapeAction", object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent) {
+                escapeAction.actionPerformed(e)
+            }
+        })
+
+        // 2. As a keyboard action
+        keyListenerPanel.registerKeyboardAction(
+            escapeAction,
+            KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+            JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT
+        )
+
+        // Create the popup
         val popup = JBPopupFactory.getInstance()
             .createComponentPopupBuilder(keyListenerPanel, keyListenerPanel)
             .setCancelOnClickOutside(true)
@@ -243,22 +295,26 @@ class QuickWindowSwitcher : AnAction() {
             .setRequestFocus(true)
             .createPopup()
 
-        // Alternative approach to handle escape key using key dispatcher
-        keyListenerPanel.registerKeyboardAction(
-            {
+        // Store the popup in our companion object
+        activePopup = popup
+
+        // Add explicit handling for when popup is canceled
+        popup.addListener(object : com.intellij.openapi.ui.popup.JBPopupListener {
+            override fun onClosed(jbPopup: com.intellij.openapi.ui.popup.LightweightWindowEvent) {
                 hideOverlays(overlays)
-                popup.cancel()
-            },
-            KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
-            JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT
-        )
+                activePopup = null
+            }
+        })
 
         // Show the invisible popup to capture keyboard input
         val firstComponent = editorWindows.firstOrNull()?.first
         if (firstComponent != null) {
             popup.show(RelativePoint.getNorthWestOf(firstComponent))
 
-            // Make sure we get focus
+            // Make sure we get focus immediately
+            keyListenerPanel.requestFocusInWindow()
+
+            // Also ensure focus in case of delay
             SwingUtilities.invokeLater {
                 keyListenerPanel.requestFocusInWindow()
             }
