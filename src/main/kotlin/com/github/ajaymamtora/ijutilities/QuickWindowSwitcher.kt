@@ -163,8 +163,8 @@ class QuickWindowSwitcher : AnAction() {
                     val padding = fontSize / 4
                     g2d.color = JBColor(Color(0, 0, 0, 150), Color(0, 0, 0, 150))
                     g2d.fillOval(
-                        (x - padding).toInt(),
-                        (y - metrics.ascent - padding).toInt(),
+                        (x - padding),
+                        (y - metrics.ascent - padding),
                         (textBounds.width + padding * 2).toInt(),
                         (textBounds.height + padding * 2).toInt()
                     )
