@@ -1,26 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <idea-plugin>
     <id>com.github.ajaymamtora.ijutilities</id>
-    <name>IJ Utilities</name>
-    <vendor>ajaymamtora</vendor>
+    <name>IJ Utilities - Tab Groups</name>
+    <vendor>Ajay Mamtora</vendor>
+
+    <description><![CDATA[
+        Adds Neovim-style tab groups to IntelliJ IDEA.
+
+        Features:
+        - Create multiple tab groups to organize your work
+        - Switch between tab groups easily
+        - Files open in the current active tab group
+        - Keyboard shortcuts for tab group navigation
+    ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Services -->
+        <projectService serviceImplementation="com.github.ajaymamtora.ijutilities.TabGroupManager"/>
+
+        <!-- Tool Windows -->
+        <toolWindow id="Tab Groups"
+                    anchor="top"
+                    secondary="false"
+                    factoryClass="com.github.ajaymamtora.ijutilities.TabGroupToolWindowFactory"/>
+
+        <!-- Startup Activity -->
+        <postStartupActivity implementation="com.github.ajaymamtora.ijutilities.TabGroupStartupActivity"/>
+    </extensions>
+
     <actions>
-        <action id="EqualizeWindows"
-                class="com.github.ajaymamtora.ijutilities.EqualizeWindowsAction"
-                text="Equalize Windows"
-                description="Equalize the size of all editor windows">
+        <!-- Action for creating a new tab group -->
+        <action id="com.github.ajaymamtora.ijutilities.NewTabGroupAction"
+                class="com.github.ajaymamtora.ijutilities.NewTabGroupAction"
+                text="New Tab Group"
+                description="Create a new tab group">
             <add-to-group group-id="WindowMenu" anchor="last"/>
-            <keyboard-shortcut keymap="$default" first-keystroke="control EQUALS"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="shift alt T"/>
         </action>
-        <action id="TerminalFocusAction"
-                class="com.github.ajaymamtora.ijutilities.TerminalFocusAction" text="TerminalFocusAction">
+
+        <!-- Action for navigating to next tab group -->
+        <action id="com.github.ajaymamtora.ijutilities.NextTabGroupAction"
+                class="com.github.ajaymamtora.ijutilities.NextTabGroupAction"
+                text="Next Tab Group"
+                description="Navigate to next tab group">
             <add-to-group group-id="WindowMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt right"/>
         </action>
-        <action id="QuickWindowSwitcher"
-                class="com.github.ajaymamtora.ijutilities.QuickWindowSwitcher"
-                text="Quick Window Switcher"
-                description="Quickly switch between editor windows">
-            <keyboard-shortcut keymap="$default" first-keystroke="alt W"/>
+
+        <!-- Action for navigating to previous tab group -->
+        <action id="com.github.ajaymamtora.ijutilities.PreviousTabGroupAction"
+                class="com.github.ajaymamtora.ijutilities.PreviousTabGroupAction"
+                text="Previous Tab Group"
+                description="Navigate to previous tab group">
+            <add-to-group group-id="WindowMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt left"/>
         </action>
     </actions>
 </idea-plugin>
