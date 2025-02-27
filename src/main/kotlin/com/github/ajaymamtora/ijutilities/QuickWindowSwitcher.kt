@@ -146,28 +146,35 @@ class QuickWindowSwitcher : AnAction() {
                     g2d.drawRect(0, 0, width - 1, height - 1)
                     g2d.drawRect(1, 1, width - 3, height - 3)
 
-                    // Create small very transparent label area at the bottom
-                    val labelHeight = height / 12
-                    g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.2f)
-                    g2d.fillRect(0, height - labelHeight, width, labelHeight)
-
-                    // Draw key letter with high contrast
+                    // Draw key letter in center with high contrast and larger size
                     g2d.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f)
-                    g2d.color = JBColor.WHITE
 
-                    val fontSize = labelHeight / 2
+                    // Calculate larger font size based on window dimensions
+                    val fontSize = Math.min(width, height) / 4
                     val font = Font("Arial", Font.BOLD, fontSize)
                     g2d.font = font
 
                     val metrics = g2d.fontMetrics
                     val x = (width - metrics.stringWidth(key.toString())) / 2
-                    val y = height - (labelHeight / 2) + (metrics.height / 4)
+                    val y = (height + metrics.height / 2) / 2  // Center vertically
 
-                    // Add slight shadow to make the letter more visible
+                    // Create a more visible background for the letter
+                    val textBounds = metrics.getStringBounds(key.toString(), g2d)
+                    val padding = fontSize / 4
+                    g2d.color = JBColor(Color(0, 0, 0, 150), Color(0, 0, 0, 150))
+                    g2d.fillOval(
+                        (x - padding).toInt(),
+                        (y - metrics.ascent - padding).toInt(),
+                        (textBounds.width + padding * 2).toInt(),
+                        (textBounds.height + padding * 2).toInt()
+                    )
+
+                    // Draw letter with shadow effect
                     g2d.color = JBColor.BLACK
-                    g2d.drawString(key.toString(), x + 1, y + 1)
+                    g2d.drawString(key.toString(), x + 2, y + 2)  // Shadow
 
-                    g2d.color = JBColor.WHITE
+                    // Draw the main letter in bright white
+                    g2d.color = Color(255, 255, 255, 255)  // Pure white, fully opaque
                     g2d.drawString(key.toString(), x, y)
                 }
             }
@@ -373,7 +380,6 @@ class QuickWindowSwitcher : AnAction() {
             }
         }
 
-        // Rest of the method remains the same...
         keyListenerPanel.addKeyListener(keyAdapter)
 
         val inputMap = keyListenerPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
@@ -418,11 +424,8 @@ class QuickWindowSwitcher : AnAction() {
         }
     }
 
-
     override fun update(e: AnActionEvent) {
         val project = e.getData(CommonDataKeys.PROJECT)
         e.presentation.isEnabledAndVisible = project != null
     }
-
-
 }
