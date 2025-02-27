@@ -13,7 +13,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.IdeFocusManager
-import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import java.awt.*
@@ -21,7 +20,6 @@ import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
-import java.util.concurrent.atomic.AtomicInteger
 import javax.swing.*
 
 
@@ -208,99 +206,96 @@ class QuickWindowSwitcher : AnAction() {
 
         // Find which file editor contains our component
         var targetFile: com.intellij.openapi.vfs.VirtualFile? = null
+        var targetEditor: com.intellij.openapi.fileEditor.FileEditor? = null
 
-        // Step 1: Find the file that contains our component
+        // Step 1: Find the file and editor that contains our component
+        val editorsList = mutableListOf<Pair<com.intellij.openapi.vfs.VirtualFile, com.intellij.openapi.fileEditor.FileEditor>>()
+
+        // Scan open files to find our component
         for (file in fileEditorManager.openFiles) {
             for (editor in fileEditorManager.getAllEditors(file)) {
+                editorsList.add(Pair(file, editor))
                 if (isComponentInHierarchy(editor.component, component)) {
                     targetFile = file
+                    targetEditor = editor
                     break
                 }
             }
             if (targetFile != null) break
         }
 
-        // Track focus attempts for debugging
-        val attemptsCounter = AtomicInteger(0)
-        val maxAttempts = 5
+        // Execute focus immediately - no delays
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                // First try to open the file (most direct approach)
+                if (targetFile != null) {
+                    // This should open the file and make it visible
+                    fileEditorManager.openFile(targetFile, true)
+                }
 
-        // Schedule multiple focus attempts with different strategies
-        val timer = Timer(50, null)
-        timer.addActionListener { _ ->
-            val attempt = attemptsCounter.incrementAndGet()
+                // Immediate direct focus on component - most important step
+                requestFocusDirectlyForComponent(component)
 
-            // Stop after max attempts
-            if (attempt > maxAttempts) {
-                timer.stop()
-                return@addActionListener
+                // If we have a text editor, also focus directly on its content component
+                if (targetEditor is TextEditor) {
+                    targetEditor.editor.contentComponent.requestFocusInWindow()
+
+                    // Scroll to make caret visible
+                    targetEditor.editor.scrollingModel.scrollToCaret(ScrollType.MAKE_VISIBLE)
+                }
+
+                // Final attempt to ensure proper focus
+                // Find the actual editing component that should get focus
+                val focusTarget = findBestFocusTarget(component)
+                focusTarget?.requestFocusInWindow()
+            } catch (ex: Exception) {
+                // Fallback: try direct focus as last resort
+                component.requestFocusInWindow()
             }
+        }
+    }
 
-            // Run on UI thread to ensure proper focus handling
-            ApplicationManager.getApplication().invokeLater {
-                try {
-                    when (attempt) {
-                        1 -> {
-                            // First attempt: Direct component focus
-                            component.requestFocusInWindow()
-                            IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown {
-                                IdeFocusManager.getGlobalInstance().requestFocus(component, true)
-                            }
-                        }
-                        2 -> {
-                            // Second attempt: Try to open the file if we found it
-                            if (targetFile != null) {
-                                fileEditorManager.openFile(targetFile, true)
+    private fun requestFocusDirectlyForComponent(component: Component) {
+        // First attempt: regular request focus
+        component.requestFocusInWindow()
 
-                                // Also try to force active status
-                                fileEditorManager.currentWindow?.setAsCurrentWindow(true)
-                            }
-                        }
-                        3 -> {
-                            // Third attempt: Get the text editor and focus directly on its content component
-                            val textEditor = fileEditorManager.selectedEditors.firstOrNull { it is TextEditor } as? TextEditor
-                            if (textEditor != null) {
-                                textEditor.editor.contentComponent.requestFocusInWindow()
-                                textEditor.editor.scrollingModel.scrollToCaret(ScrollType.MAKE_VISIBLE)
-                            }
-                        }
-                        4 -> {
-                            // Fourth attempt: Ensure no tool windows are active
-                            ToolWindowManager.getInstance(project).activeToolWindowId?.let { windowId ->
-                                ToolWindowManager.getInstance(project).getToolWindow(windowId)?.hide(null)
-                            }
+        // Second attempt: try to make component's window active
+        val window = SwingUtilities.getWindowAncestor(component)
+        window?.toFront()
 
-                            // Then refocus editor
-                            IdeFocusManager.getInstance(project).requestFocus(component, true)
-                        }
-                        5 -> {
-                            // Fifth attempt: Try UI-level focus (this is our most aggressive approach)
-                            val window = SwingUtilities.getWindowAncestor(component)
-                            window?.toFront()
+        // Third attempt: use IDE focus manager (but without delays)
+        IdeFocusManager.getGlobalInstance().requestFocus(component, true)
+    }
 
-                            SwingUtilities.invokeLater {
-                                // Find all focusable components and try them in sequence
-                                findAllFocusableComponents(component).forEach { focusableComponent ->
-                                    SwingUtilities.invokeLater {
-                                        focusableComponent.requestFocusInWindow()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (ex: Exception) {
-                    // Move to the next attempt if an exception occurs
+    private fun findBestFocusTarget(component: Component): Component? {
+        // First look for editor content component which is the target we usually want
+        val contentComponent = findComponentOfType(component, "com.intellij.openapi.editor.impl.EditorComponentImpl")
+        if (contentComponent != null) {
+            return contentComponent
+        }
+
+        // Next try to find any focusable leaf component (deepest in hierarchy)
+        return findDeepestFocusableComponent(component)
+    }
+
+    private fun findComponentOfType(component: Component, className: String): Component? {
+        // Check if this component's class name matches
+        if (component.javaClass.name == className) {
+            return component
+        }
+
+        // Recursively check child components
+        if (component is Container) {
+            for (i in 0 until component.componentCount) {
+                val result = findComponentOfType(component.getComponent(i), className)
+                if (result != null) {
+                    return result
                 }
             }
         }
 
-        // Set timer to repeat and start it
-        timer.initialDelay = 50
-        timer.delay = 200
-        timer.isRepeats = true
-        timer.start()
+        return null
     }
-
-
 
     private fun isComponentInHierarchy(parent: Component, target: Component): Boolean {
         if (parent === target) return true
@@ -336,22 +331,6 @@ class QuickWindowSwitcher : AnAction() {
         }
 
         return null
-    }
-
-    private fun findAllFocusableComponents(component: Component): List<Component> {
-        val result = mutableListOf<Component>()
-
-        if (component.isFocusable) {
-            result.add(component)
-        }
-
-        if (component is Container) {
-            for (i in 0 until component.componentCount) {
-                result.addAll(findAllFocusableComponents(component.getComponent(i)))
-            }
-        }
-
-        return result
     }
 
     private fun setupKeyListener(project: Project, editorWindows: List<Pair<JComponent, Rectangle>>, overlays: List<JDialog>) {
